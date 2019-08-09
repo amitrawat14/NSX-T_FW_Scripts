@@ -20,10 +20,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 print(
     '''
 Kindly select the NSX Manager IP and Enter
-lnp6p9nsxmgr01 - 10.28.57.150
-nj4p9nsxmgr01 - 10.197.35.150
-ric1p9nsxmgr01 - 10.198.35.150
-lon6p9nsxmgr01 - 10.234.35.150
+
 '''
     )
 ##print (NSX_IP)
@@ -31,7 +28,7 @@ lon6p9nsxmgr01 - 10.234.35.150
 nsxmanager = input("Please input the nsx manager ip or fqdn: ")
 
 
-#nsxmanager = '10.28.57.150'
+#nsxmanager = '10.'
 #username = input("Enter username: ")
 username = 'admin'
 password = password
