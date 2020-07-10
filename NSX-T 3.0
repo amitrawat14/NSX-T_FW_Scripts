@@ -1,0 +1,370 @@
+import requests, re, getpass,urllib3
+import requests.packages
+import json,csv
+
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+
+nsxmanager = input("Please input the nsx manager ip or fqdn: ")
+username = input("Enter username: ")
+password = getpass.getpass("Enter password: ")
+headers = {'content-type': 'application/json'}
+
+
+
+def fetchVirtualMachines(username,password,nsxmanager):
+    """
+    Use this URL path to fetch Virtual Machine Details
+    """
+    headers = {'content-type': 'application/json'}
+    url= 'https://'+nsxmanager+'/api/v1/fabric/virtual-machines'
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            for i in data['results']:
+                vmstatus = i['power_state']
+                vmname = i['display_name']
+                hostname = i['source']['target_display_name']
+                if vmstatus == 'VM_RUNNING' and 'os_name' in i['guest_info'].keys():
+                    osdetail = i['guest_info']['os_name']
+                    print (f"{hostname}  {vmname}  {vmstatus}  {osdetail}")
+                else:
+                    osdetail="OS Details Not Found" # sometims os detail not available due vm shutdown..
+                    print (hostname,vmname,vmstatus,osdetail)
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+
+
+## If we have NSX Manager in different location , We can put them in list and run as below. This will login to each NSX Manager and get the
+## VM Related Details. 
+
+
+# nsxmanager_list = ['dc1_nsxmgr01','dc2_nsxmgr_02']
+# for nsxmanager in nsxmanager_list:
+#     fetchVirtualMachines(url,username,password,nsxmanager)
+
+
+
+def fetchLogicRouters(username,password,nsxmanager):
+    """
+    Use this URL path to fetch Virtual Machine Details and can be comment out if required.
+    """
+    url= f'https://{nsxmanager}/api/v1/logical-routers'
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            for i in data['results']:
+                router_type = i['router_type']
+                ha_mode = i['high_availability_mode']
+                logical_router_id = i['id']
+                display_name = i['display_name']
+                print(router_type,ha_mode,logical_router_id,display_name)
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+
+
+
+def fetchBgpNeighbour_Deprecated(url,username,password,nsxmanager):
+    """
+    Use this URL path to fetch Virtual Machine Details and can be comment out if required.
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logicalrouterid-needed}/routing/bgp/neighbors'
+    """
+    # Getting Tier0 Router-ID dynamically 
+    logical_router_url = f'https://{nsxmanager}/api/v1/logical-routers'
+    logical_router_id = None
+    try:
+        r = requests.get(url=logical_router_url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            # print(data['results'])
+            for i in data['results']:
+                if i['router_type'] == 'TIER0':
+                    print(i['id'])
+                    logical_router_id = i['id']
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logical_router_id}/routing/bgp/neighbors'
+    print("print new url for bgp neighbour",url)
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            for i in data['results']:
+                neighbor_address = i['neighbor_address']
+                remote_as_num = i['remote_as_num']
+                source_addresses = i ['source_addresses']
+                hold_down_timer = i['hold_down_timer']
+                keep_alive_timer = i['keep_alive_timer']
+                print(neighbor_address,source_addresses,remote_as_num,hold_down_timer,keep_alive_timer)
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+
+
+
+
+def fetchTier0ID(username,password,nsxmanager,headers):
+    """
+    Use this URL path to fetch Tier0 ID. ID is important to fetch neighbours or routing details. and can be comment out if required.
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logicalrouterid-needed}/routing/bgp/neighbors'
+    """
+    # Getting Tier0 Router-ID dynamically 
+    url = f'https://{nsxmanager}/api/v1/logical-routers'
+    logical_router_id = None
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            # print(data['results'])
+            for i in data['results']:
+                if i['router_type'] == 'TIER0':
+                    print(i['id'])
+                    logical_router_id = i['id']
+                    return logical_router_id
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+    ## Executing BGP Neighbourship on tier0
+
+def fetchTier1ID(username,password,nsxmanager,headers):
+    """
+    Use this URL path to fetch Tier0 ID. ID is important to fetch neighbours or routing details. and can be comment out if required.
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logicalrouterid-needed}/routing/bgp/neighbors'
+    """
+    # Getting Tier0 Router-ID dynamically 
+    url = f'https://{nsxmanager}/api/v1/logical-routers'
+    # logical_router_id = None
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            # print(data['results'])
+            for i in data['results']:
+                if i['router_type'] == 'TIER1':
+                    print(i['id'])
+                    logical_router_id = i['id']
+                    return logical_router_id
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+        ## Executing BGP Neighbourship on tier0
+
+
+
+def fetchBgpNeighbour(username,password,nsxmanager,headers):
+    """
+    Use this URL path to fetch Virtual Machine Details and can be comment out if required.
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logicalrouterid-needed}/routing/bgp/neighbors'
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    logical_router_id = fetchTier0ID(username,password,nsxmanager,headers)
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logical_router_id}/routing/bgp/neighbors'
+    print("print new url for bgp neighbour",url)
+    try:
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        print(r.status_code)
+        if r.status_code != 200:
+            print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+        else:
+            print(f"Login successful to NSX Manager {nsxmanager}")
+            data = r.json() #Raw Data
+            # print (data)
+            for i in data['results']:
+                neighbor_address = i['neighbor_address']
+                remote_as_num = i['remote_as_num']
+                source_addresses = i ['source_addresses']
+                hold_down_timer = i['hold_down_timer']
+                keep_alive_timer = i['keep_alive_timer']
+                neighbor_uuid = i['id']
+                print(neighbor_address,source_addresses,remote_as_num,hold_down_timer,keep_alive_timer,neighbor_uuid)
+                # return neighbor_uuid
+                return {neighbor_uuid:neighbor_address}  # return neigh uuid...
+    except:
+        print(f"Unable to connect to NSX Manager, Kindly check the NSX Manager details if correct >> {nsxmanager}")
+
+
+
+
+def fetchTransportID(username,password,nsxmanager,headers):
+    """
+    Use this URL path to Transport ID. We need to get logical Router ID and Individual Neigbour we call neighbour fetach function to get the neighbour UUID
+    this ID is use to get all the transport NODE 
+    url = f'https://{nsxmanager}/api/v1/logical-routers/f1e6a9b4-6e12-4b31-bb48-2a5831c9dae8/routing/bgp/neighbors/{id}/routes'
+    
+    Expect Output 
+    {'25538584-dabe-11e7-b99f-0050ssss3894': '1.2.3.4', '23664410-dc2f-11e7-934a-0050sdfsdfsdfd': '1.2.3.5', '4c786fcc-dabd-11e7-a160-005056bcbf05': '1.2.3.4.6'}
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    transport_node_dict = {}
+    logical_router_id = fetchTier0ID(username,password,nsxmanager,headers)
+    neighbour_Dict = fetchBgpNeighbour(username,password,nsxmanager,headers)  #gives neigh dict with uuid as key and value as neighbour IP
+    print("print neigh dict",neighbour_Dict)
+    for id in neighbour_Dict:
+        # print(id)
+        url = f'https://{nsxmanager}/api/v1/logical-routers/f1e6a9b4-6e12-4b31-bb48-2a5831c9dae8/routing/bgp/neighbors/{id}/routes'
+        r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+        data = r.json()
+        for i in data['per_transport_node_routes']:
+            # print(i)
+            transport_node_id = i['transport_node_id']
+            source_address = i['source_address']
+            routes = i['routes']
+            # print(transport_node_id,source_address,routes)
+            transport_node_dict[transport_node_id]=source_address
+    return transport_node_dict
+    
+
+
+def fetchRoutingTableFromTransportNodes(username,password,nsxmanager,headers):
+    """
+    Use this URL path to fetch Virtual Machine Details and can be comment out if required.
+    url= f'https://{nsxmanager}/api/v1/logical-routers/{logicalrouterid-needed}/routing/bgp/neighbors'
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    logical_router_id = fetchTier0ID(username,password,nsxmanager,headers)
+    # username ='a'
+    transport_node_dict = fetchTransportID(username,password,nsxmanager,headers)
+    # print(transport_node_dict)
+    if bool(transport_node_dict):
+        for transport_node_id in transport_node_dict:
+            url = f'https://{nsxmanager}/api/v1/logical-routers/{logical_router_id}/routing/routing-table?transport_node_id={transport_node_id}&source=realtime'
+            print (url)
+            r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+            if r.status_code != 200:
+                print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+            else:
+                print(f"Login successful to NSX Manager {nsxmanager}")
+                data = r.json()
+                for i in data['results']:
+                    print(i)
+    else:
+        print("No Transport ID Available")
+            
+
+
+
+def fetchLogicalSwitches(username,password,nsxmanager,headers):
+    """
+    Use this URL path to Logical Switch Details.
+    url= f'https://{nsxmanager}/api/v1/logical-switches'
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    url=f'https://{nsxmanager}/api/v1/logical-switches'
+    r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+    logical_switch_list = []
+    # print(transport_node_dict)
+    if r.status_code != 200:
+        print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+    else:
+        print(f"Login successful to NSX Manager {nsxmanager}")
+        data = r.json()        
+        for i in data['results']:
+            display_name =  i['display_name']
+            logical_switch_id = i['id']
+            logical_switch_list.append(logical_switch_id)
+            if i.get('vni'):
+                print(display_name,logical_switch_id,i.get('vni'))
+            else:
+                i.get('vlan')
+                print(display_name,logical_switch_id,i.get('vlan'))
+    return logical_switch_list
+
+
+
+
+def fetchMacAddressOnLogicalSwitches(username,password,nsxmanager,headers):
+    """
+    Use this URL path to Logical Switch Details.
+    url= f'https://{nsxmanager}/api/v1/logical-switches/{switchid}/mac-table?transport_node_id=xx&source=realtime'
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    logical_switch_id_list  = fetchLogicalSwitches(username,password,nsxmanager,headers)
+    transport_node_dict = fetchTransportID(username,password,nsxmanager,headers)
+    if bool(transport_node_dict) and bool(logical_switch_id_list):
+        for logical_switch in logical_switch_id_list:
+            # url=f'https://{nsxmanager}/api/v1/logical-switches/{logical_switch}/mac-table?'
+            for transport_node_id in transport_node_dict:
+                # url = url+ f'transport_node_id={transport_node_id}&source=realtime'
+                url = f'https://{nsxmanager}/api/v1/logical-switches/{logical_switch}/mac-table?transport_node_id={transport_node_id}&source=realtime'
+                print ("priting final url",url)
+                r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+                if r.status_code != 200:
+                    print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+                else:
+                    print(f"Login successful to NSX Manager {nsxmanager}")
+                    data = r.json()
+                    for i in data['results']:
+                        print(i)
+    else:
+        print("No Transport ID or Logical Switch list  Available")
+        
+
+
+def fetchVtepTableOnLogicalSwitches(username,password,nsxmanager,headers):
+    """
+    Use this URL path to VTEP Details  Switch Details.
+    url= f'https://{nsxmanager}/api/v1/logical-switches/{switchid}/mac-table?transport_node_id=xx&source=realtime'
+    """
+    ## Executing BGP Neighbourship on tier0
+    # id = logical_router_id
+    # Get login Router ID function using fetchTier0ID function this return fetch0 Tier0 Logical Router ID
+    logical_switch_id_list  = fetchLogicalSwitches(username,password,nsxmanager,headers)
+    # transport_node_dict = fetchTransportID(username,password,nsxmanager,headers)
+    if bool(logical_switch_id_list):
+        for logical_switch in logical_switch_id_list:
+            url=f'https://{nsxmanager}/api/v1/logical-switches/{logical_switch}/vtep-table?source=realtime'
+            # url = f'https://{nsxmanager}/api/v1/logical-switches/{logical_switch}/mac-table?transport_node_id={transport_node_id}&source=realtime'
+            # print ("priting final url",url)
+            r = requests.get(url=url,headers=headers,auth=(username,password),verify=False)
+            if r.status_code != 200:
+                print(f"Unable to login to DC or Request Time Out. Status Code is {r.status_code} {r.text}")
+            else:
+                print(f"Login successful to NSX Manager {nsxmanager}")
+                data = r.json()
+                for i in data['results']:
+                    print(i)
+    else:
+        print("No Transport ID or Logical Switch list  Available")
+
+    
+
+
